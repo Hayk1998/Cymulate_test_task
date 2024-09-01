@@ -1,15 +1,19 @@
-import {Module, OnModuleInit} from '@nestjs/common';
+import {MiddlewareConsumer, Module, NestModule} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as dotenv from 'dotenv';
-import { Mongoose } from 'mongoose';
+import { AuthModule } from './auth/auth.module';
+import { PhishingModule } from './phishing/phishing.module';
+import {JwtService} from "./auth/jwt.service";
+import {AuthMiddleware} from "./auth/auth.middleware";
+import {EmailService} from "./sharedServices/email.service";
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       load: [() => {
-        const nodeEnv = process.env.NODE_ENV || 'development';
-        const envFilePath = `.env.${nodeEnv}`;
+        const nodeEnv = process.env.NODE_ENV;
+        const envFilePath = nodeEnv ? `.env.${nodeEnv}`: '.env';
         dotenv.config({ path: envFilePath });
         return {};
       }],
@@ -25,22 +29,15 @@ import { Mongoose } from 'mongoose';
       },
       inject: [ConfigService],
     }),
+    AuthModule,
+    PhishingModule,
   ],
+  providers: [JwtService, EmailService],
 })
-export class AppModule implements OnModuleInit {
-  constructor(private readonly mongoose: Mongoose) {}
-
-  onModuleInit() {
-    this.mongoose.connection.on('connected', () => {
-      console.log('Successfully connected to MongoDB');
-    });
-
-    this.mongoose.connection.on('error', (error) => {
-      console.error('Error connecting to MongoDB:', error);
-    });
-
-    this.mongoose.connection.on('disconnected', () => {
-      console.log('Disconnected from MongoDB');
-    });
+export class AppModule  implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+        .apply(AuthMiddleware)
+        .forRoutes('phishing'); // Apply middleware to specific routes or globally
   }
 }
